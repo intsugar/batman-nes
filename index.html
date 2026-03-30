@@ -80,28 +80,36 @@
       -webkit-user-select: none;
       touch-action: none;
     }
-    .dpad {
+    .joystick-zone {
       position: absolute;
-      left: 20px;
-      top: 10px;
-      width: 130px;
-      height: 130px;
+      left: 10px;
+      top: 5px;
+      width: 140px;
+      height: 140px;
     }
-    .dpad-btn {
+    .joystick-base {
       position: absolute;
-      background: rgba(255,255,255,0.15);
-      border: 2px solid rgba(255,255,255,0.3);
-      border-radius: 8px;
-      color: #fff;
-      font-size: 1.4rem;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.08);
+      border: 2px solid rgba(255,255,255,0.2);
     }
-    .dpad-up    { width: 44px; height: 44px; left: 43px; top: 0; }
-    .dpad-down  { width: 44px; height: 44px; left: 43px; bottom: 0; }
-    .dpad-left  { width: 44px; height: 44px; left: 0; top: 43px; }
-    .dpad-right { width: 44px; height: 44px; right: 0; top: 43px; }
+    .joystick-knob {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 40% 38%, rgba(255,255,255,0.35), rgba(255,255,255,0.12));
+      border: 2px solid rgba(255,255,255,0.4);
+      transition: none;
+    }
     .action-buttons {
       position: absolute;
       right: 20px;
@@ -153,11 +161,10 @@
   <button id="start-btn">Start Game</button>
 
   <div id="mobile-controls">
-    <div class="dpad">
-      <div class="dpad-btn dpad-up" data-btn="UP">&uarr;</div>
-      <div class="dpad-btn dpad-down" data-btn="DOWN">&darr;</div>
-      <div class="dpad-btn dpad-left" data-btn="LEFT">&larr;</div>
-      <div class="dpad-btn dpad-right" data-btn="RIGHT">&rarr;</div>
+    <div class="joystick-zone" id="joystick-zone">
+      <div class="joystick-base">
+        <div class="joystick-knob" id="joystick-knob"></div>
+      </div>
     </div>
     <div class="action-buttons">
       <div class="action-btn" data-btn="B">B</div>
@@ -304,17 +311,96 @@
       }
     });
 
-    // Mobile touch controls
+    // Virtual joystick
+    (function() {
+      var zone = document.getElementById('joystick-zone');
+      var knob = document.getElementById('joystick-knob');
+      var activeTouch = null;
+      var baseRadius = 60; // half of joystick-base width
+      var knobRadius = 25; // half of knob width
+      var maxDist = baseRadius - knobRadius + 5;
+      var deadZone = 0.3; // 30% dead zone
+      var currentDirs = { UP: false, DOWN: false, LEFT: false, RIGHT: false };
+
+      function updateButtons(dirs) {
+        ['UP','DOWN','LEFT','RIGHT'].forEach(function(d) {
+          if (dirs[d] && !currentDirs[d]) nes.buttonDown(1, BUTTONS[d]);
+          if (!dirs[d] && currentDirs[d]) nes.buttonUp(1, BUTTONS[d]);
+          currentDirs[d] = dirs[d];
+        });
+      }
+
+      function handleMove(cx, cy) {
+        var rect = zone.getBoundingClientRect();
+        var centerX = rect.left + rect.width / 2;
+        var centerY = rect.top + rect.height / 2;
+        var dx = cx - centerX;
+        var dy = cy - centerY;
+        var dist = Math.sqrt(dx * dx + dy * dy);
+        // Clamp
+        if (dist > maxDist) { dx = dx / dist * maxDist; dy = dy / dist * maxDist; dist = maxDist; }
+        knob.style.transform = 'translate(calc(-50% + ' + dx + 'px), calc(-50% + ' + dy + 'px))';
+        var norm = dist / maxDist;
+        if (norm < deadZone) {
+          updateButtons({ UP: false, DOWN: false, LEFT: false, RIGHT: false });
+          return;
+        }
+        var angle = Math.atan2(dy, dx);
+        var dirs = { UP: false, DOWN: false, LEFT: false, RIGHT: false };
+        // Allow diagonals: use 8-direction zones
+        if (angle > -2.75 && angle < -0.39) dirs.UP = true;    // roughly -157 to -22 deg
+        if (angle > 0.39 && angle < 2.75) dirs.DOWN = true;
+        if (Math.abs(angle) > 1.18) dirs.LEFT = true;           // roughly > 67 deg from center
+        if (Math.abs(angle) < 1.96) dirs.RIGHT = true;          // roughly < 112 deg
+        updateButtons(dirs);
+      }
+
+      function resetStick() {
+        knob.style.transform = 'translate(-50%, -50%)';
+        updateButtons({ UP: false, DOWN: false, LEFT: false, RIGHT: false });
+        activeTouch = null;
+      }
+
+      zone.addEventListener('touchstart', function(e) {
+        e.preventDefault();
+        activeTouch = e.changedTouches[0].identifier;
+        handleMove(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
+      }, { passive: false });
+
+      document.addEventListener('touchmove', function(e) {
+        if (activeTouch === null) return;
+        for (var i = 0; i < e.changedTouches.length; i++) {
+          if (e.changedTouches[i].identifier === activeTouch) {
+            e.preventDefault();
+            handleMove(e.changedTouches[i].clientX, e.changedTouches[i].clientY);
+            return;
+          }
+        }
+      }, { passive: false });
+
+      document.addEventListener('touchend', function(e) {
+        for (var i = 0; i < e.changedTouches.length; i++) {
+          if (e.changedTouches[i].identifier === activeTouch) { resetStick(); return; }
+        }
+      });
+      document.addEventListener('touchcancel', function(e) {
+        for (var i = 0; i < e.changedTouches.length; i++) {
+          if (e.changedTouches[i].identifier === activeTouch) { resetStick(); return; }
+        }
+      });
+    })();
+
+    // Action & meta button touch controls
     document.querySelectorAll('[data-btn]').forEach(function(el) {
       function press(e) {
         e.preventDefault();
-        const btn = el.getAttribute('data-btn');
+        var btn = el.getAttribute('data-btn');
         nes.buttonDown(1, BUTTONS[btn]);
         el.style.background = 'rgba(255,255,255,0.35)';
       }
       function release(e) {
         e.preventDefault();
-        const btn = el.getAttribute('data-btn');
+        var btn = el.getAttribute('data-btn');
         nes.buttonUp(1, BUTTONS[btn]);
         el.style.background = '';
       }
