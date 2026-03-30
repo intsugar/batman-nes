@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Batman - NES</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #111;
+      color: #ccc;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+    h1 {
+      font-size: 1.4rem;
+      margin-bottom: 10px;
+      color: #f0c040;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+    #screen-wrapper {
+      position: relative;
+      border: 3px solid #333;
+      border-radius: 6px;
+      overflow: hidden;
+      background: #000;
+    }
+    canvas {
+      display: block;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+    }
+    #controls {
+      margin-top: 14px;
+      font-size: 0.8rem;
+      text-align: center;
+      color: #777;
+      line-height: 1.6;
+    }
+    #controls kbd {
+      background: #222;
+      border: 1px solid #444;
+      border-radius: 3px;
+      padding: 1px 6px;
+      font-family: monospace;
+      color: #ddd;
+    }
+    #start-btn {
+      margin-top: 16px;
+      padding: 12px 36px;
+      font-size: 1.1rem;
+      background: #f0c040;
+      color: #111;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      display: none;
+    }
+    #start-btn:hover { background: #ffd060; }
+    #loading { color: #f0c040; font-size: 1rem; margin-top: 20px; }
+
+    /* Mobile D-pad and buttons */
+    #mobile-controls {
+      display: none;
+      width: 100%;
+      max-width: 512px;
+      margin-top: 12px;
+      position: relative;
+      height: 160px;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+    }
+    .dpad {
+      position: absolute;
+      left: 20px;
+      top: 10px;
+      width: 130px;
+      height: 130px;
+    }
+    .dpad-btn {
+      position: absolute;
+      background: rgba(255,255,255,0.15);
+      border: 2px solid rgba(255,255,255,0.3);
+      border-radius: 8px;
+      color: #fff;
+      font-size: 1.4rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .dpad-up    { width: 44px; height: 44px; left: 43px; top: 0; }
+    .dpad-down  { width: 44px; height: 44px; left: 43px; bottom: 0; }
+    .dpad-left  { width: 44px; height: 44px; left: 0; top: 43px; }
+    .dpad-right { width: 44px; height: 44px; right: 0; top: 43px; }
+    .action-buttons {
+      position: absolute;
+      right: 20px;
+      top: 20px;
+    }
+    .action-btn {
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.15);
+      border: 2px solid rgba(255,255,255,0.3);
+      color: #fff;
+      font-size: 0.9rem;
+      font-weight: bold;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 4px;
+    }
+    .meta-buttons {
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      bottom: 10px;
+    }
+    .meta-btn {
+      padding: 8px 18px;
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.25);
+      border-radius: 14px;
+      color: #aaa;
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      margin: 0 6px;
+    }
+
+    @media (pointer: coarse) {
+      #mobile-controls { display: block; }
+      #controls { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <h1>Batman</h1>
+  <div id="screen-wrapper">
+    <canvas id="nes-canvas" width="256" height="240"></canvas>
+  </div>
+  <div id="loading">Loading ROM...</div>
+  <button id="start-btn">Start Game</button>
+
+  <div id="mobile-controls">
+    <div class="dpad">
+      <div class="dpad-btn dpad-up" data-btn="UP">&uarr;</div>
+      <div class="dpad-btn dpad-down" data-btn="DOWN">&darr;</div>
+      <div class="dpad-btn dpad-left" data-btn="LEFT">&larr;</div>
+      <div class="dpad-btn dpad-right" data-btn="RIGHT">&rarr;</div>
+    </div>
+    <div class="action-buttons">
+      <div class="action-btn" data-btn="B">B</div>
+      <div class="action-btn" data-btn="A">A</div>
+    </div>
+    <div class="meta-buttons">
+      <div class="meta-btn" data-btn="SELECT">Select</div>
+      <div class="meta-btn" data-btn="START">Start</div>
+    </div>
+  </div>
+
+  <div id="controls">
+    <kbd>Arrow Keys</kbd> Move &nbsp;|&nbsp;
+    <kbd>Z</kbd> B &nbsp;|&nbsp;
+    <kbd>X</kbd> A &nbsp;|&nbsp;
+    <kbd>Enter</kbd> Start &nbsp;|&nbsp;
+    <kbd>Shift</kbd> Select
+  </div>
+
+  <script src="jsnes.min.js"></script>
+  <script>
+    const canvas = document.getElementById('nes-canvas');
+    const ctx = canvas.getContext('2d');
+    const imgData = ctx.createImageData(256, 240);
+    const startBtn = document.getElementById('start-btn');
+    const loadingEl = document.getElementById('loading');
+
+    // Scale canvas for display
+    function scaleCanvas() {
+      const maxW = Math.min(window.innerWidth - 20, 512);
+      const scale = maxW / 256;
+      canvas.style.width = Math.floor(256 * scale) + 'px';
+      canvas.style.height = Math.floor(240 * scale) + 'px';
+    }
+    scaleCanvas();
+    window.addEventListener('resize', scaleCanvas);
+
+    // Frame buffer
+    const buf = new ArrayBuffer(imgData.data.length);
+    const buf8 = new Uint8ClampedArray(buf);
+    const buf32 = new Uint32Array(buf);
+
+    // Audio
+    let audioCtx = null;
+    const SAMPLE_RATE = 44100;
+    const BUFFER_SIZE = 8192;
+    let audioSamples = [];
+    let scriptNode = null;
+
+    function initAudio() {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE });
+      scriptNode = audioCtx.createScriptProcessor(BUFFER_SIZE, 0, 1);
+      scriptNode.onaudioprocess = function(e) {
+        const output = e.outputBuffer.getChannelData(0);
+        const len = Math.min(audioSamples.length, output.length);
+        for (let i = 0; i < len; i++) {
+          output[i] = audioSamples[i];
+        }
+        for (let i = len; i < output.length; i++) {
+          output[i] = 0;
+        }
+        audioSamples.splice(0, len);
+      };
+      scriptNode.connect(audioCtx.destination);
+    }
+
+    // NES
+    const nes = new jsnes.NES({
+      onFrame: function(frameBuffer) {
+        for (let i = 0; i < 256 * 240; i++) {
+          buf32[i] = 0xFF000000 | (frameBuffer[i] & 0x00FFFFFF);
+        }
+        imgData.data.set(buf8);
+        ctx.putImageData(imgData, 0, 0);
+      },
+      onAudioSample: function(left, right) {
+        if (audioCtx) {
+          audioSamples.push((left + right) / 2);
+          // Prevent buffer overflow
+          if (audioSamples.length > SAMPLE_RATE) {
+            audioSamples.splice(0, audioSamples.length - BUFFER_SIZE);
+          }
+        }
+      }
+    });
+
+    // Load ROM
+    fetch('rom.nes')
+      .then(r => r.arrayBuffer())
+      .then(buf => {
+        const data = new Uint8Array(buf);
+        let str = '';
+        for (let i = 0; i < data.length; i++) {
+          str += String.fromCharCode(data[i]);
+        }
+        loadingEl.style.display = 'none';
+        startBtn.style.display = 'inline-block';
+        startBtn.addEventListener('click', function() {
+          startBtn.style.display = 'none';
+          initAudio();
+          nes.loadROM(str);
+          frame();
+        });
+      })
+      .catch(() => {
+        loadingEl.textContent = 'Failed to load ROM.';
+      });
+
+    function frame() {
+      nes.frame();
+      requestAnimationFrame(frame);
+    }
+
+    // Keyboard mapping
+    const BUTTONS = {
+      UP: jsnes.Controller.BUTTON_UP,
+      DOWN: jsnes.Controller.BUTTON_DOWN,
+      LEFT: jsnes.Controller.BUTTON_LEFT,
+      RIGHT: jsnes.Controller.BUTTON_RIGHT,
+      A: jsnes.Controller.BUTTON_A,
+      B: jsnes.Controller.BUTTON_B,
+      SELECT: jsnes.Controller.BUTTON_SELECT,
+      START: jsnes.Controller.BUTTON_START
+    };
+
+    const KEY_MAP = {
+      ArrowUp: 'UP', ArrowDown: 'DOWN', ArrowLeft: 'LEFT', ArrowRight: 'RIGHT',
+      KeyX: 'A', KeyZ: 'B', ShiftRight: 'SELECT', ShiftLeft: 'SELECT',
+      Enter: 'START'
+    };
+
+    document.addEventListener('keydown', function(e) {
+      const btn = KEY_MAP[e.code];
+      if (btn) {
+        nes.buttonDown(1, BUTTONS[btn]);
+        e.preventDefault();
+      }
+    });
+    document.addEventListener('keyup', function(e) {
+      const btn = KEY_MAP[e.code];
+      if (btn) {
+        nes.buttonUp(1, BUTTONS[btn]);
+        e.preventDefault();
+      }
+    });
+
+    // Mobile touch controls
+    document.querySelectorAll('[data-btn]').forEach(function(el) {
+      function press(e) {
+        e.preventDefault();
+        const btn = el.getAttribute('data-btn');
+        nes.buttonDown(1, BUTTONS[btn]);
+        el.style.background = 'rgba(255,255,255,0.35)';
+      }
+      function release(e) {
+        e.preventDefault();
+        const btn = el.getAttribute('data-btn');
+        nes.buttonUp(1, BUTTONS[btn]);
+        el.style.background = '';
+      }
+      el.addEventListener('touchstart', press, { passive: false });
+      el.addEventListener('touchend', release, { passive: false });
+      el.addEventListener('touchcancel', release, { passive: false });
+    });
+  </script>
+</body>
+</html>
