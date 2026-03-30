@@ -347,11 +347,11 @@
         }
         var angle = Math.atan2(dy, dx);
         var dirs = { UP: false, DOWN: false, LEFT: false, RIGHT: false };
-        // Allow diagonals: use 8-direction zones
-        if (angle > -2.75 && angle < -0.39) dirs.UP = true;    // roughly -157 to -22 deg
-        if (angle > 0.39 && angle < 2.75) dirs.DOWN = true;
-        if (Math.abs(angle) > 1.18) dirs.LEFT = true;           // roughly > 67 deg from center
-        if (Math.abs(angle) < 1.96) dirs.RIGHT = true;          // roughly < 112 deg
+        // Allow diagonals: 45° cardinal zones with 22.5° overlap for diagonals
+        if (angle > -2.75 && angle < -0.39) dirs.UP = true;     // -157.5° to -22.5°
+        if (angle > 0.39 && angle < 2.75) dirs.DOWN = true;     //  22.5° to 157.5°
+        if (Math.abs(angle) > 1.96) dirs.LEFT = true;           // beyond ±112.5°
+        if (Math.abs(angle) < 1.18) dirs.RIGHT = true;          // within ±67.5°
         updateButtons(dirs);
       }
 
